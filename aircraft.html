@@ -37,9 +37,7 @@
 </html>
 
 <script type="text/javascript" src="js/three.min.js">//threejs</script>
-<script type="text/javascript" src="js/OrbitControls.js">//控制器</script>
 <script type="text/javascript" src="js/stats.min.js">//状态监控</script>
-<script type="text/javascript" src="js/Tween.js">//补间动画</script>
 <script type="text/javascript">
 "use strict";
 //常量
@@ -801,7 +799,7 @@ class Animate {
   loop() {
     this.animationFrameId = requestAnimationFrame(this.loop.bind(this));
     this.stats.update();
-    TWEEN.update();
+    //TWEEN.update();
 
     this.update();
     this.renderer.clear();
