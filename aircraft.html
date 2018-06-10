@@ -1,0 +1,953 @@
+﻿<!doctype html>
+<!-- saved from url=(0016)http://localhost -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="author" content="wesker(http://www.wesker926.com/)">
+    <title>aircraft</title>
+
+    <style>
+        body {
+            background: #000000;
+            overflow: hidden;
+        }
+        #animate {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            left: 0;
+            top: 0;
+            overflow: hidden;
+            background: linear-gradient(#e4e0ba, #f7d9aa);
+        }
+        #animate-canvas {
+            position: absolute;
+            width: 100%; 
+            height: 100%;
+            left: 0;
+            top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="animate">
+        <canvas id="animate-canvas"></canvas>
+    </div>
+</body>
+</html>
+
+<script type="text/javascript" src="js/three.js">//threejs</script>
+<script type="text/javascript" src="js/OrbitControls.js">//控制器</script>
+<script type="text/javascript" src="js/stats.min.js">//状态监控</script>
+<script type="text/javascript" src="js/Tween.js">//补间动画</script>
+<script type="text/javascript">
+"use strict";
+//常量
+const PI = Math.PI;
+const PI2 = Math.PI * 2;
+const ONE_ANGLE = PI / 180;
+const COLORS = {
+  WHITE: 0xffffff,
+  BLACK: 0x000000,
+  GRAY_AA: 0xaaaaaa,
+  GRAY_D8: 0xd8d0d1,
+  RED: 0xf25346,
+  BROWN: 0x59332e,
+  PINK: 0xF5986E,
+  BROWN_DARK: 0x23190f,
+  BLUE: 0x68c3c0,
+  LIGHT_YELLOW: 0xf7d9aa,
+  DARK_ORANGE: 0xdc8874,
+  DEEP_BLUE: 0x303070
+}
+
+//声明动画类对象
+var animate;
+
+//物体类-海洋
+class SeaObj {
+  constructor(father) {
+    this.father = father;
+
+    var geometry = new THREE.CylinderGeometry(600,600,800,60,30);
+    geometry.applyMatrix(new THREE.Matrix4().makeRotationX(-PI / 2));
+
+    //获取几何体的顶点信息，用于波浪制造
+    this.wavesInfo = [];
+    geometry.vertices.forEach((item) => {
+      this.wavesInfo.push({
+        x: item.x,
+        y: item.y,
+        z: item.z,
+        angle: Math.random() * PI2,
+        r: Math.random() * 15,//不能高过飞机的最低高度
+        speed: ONE_ANGLE + Math.random() * ONE_ANGLE * 2
+      });
+    });
+
+    var material = new THREE.MeshPhongMaterial({
+      color: COLORS.BLUE,
+      transparent: true,
+      opacity: 0.6,
+      //平面着色
+      flatShading: true
+    });
+    this.mesh = new THREE.Mesh(geometry, material);
+    this.mesh.receiveShadow = true;
+    this.mesh.castShadow = true;
+  }
+
+  update() {
+    //海洋物体更新
+    this.mesh.rotation.z = (this.mesh.rotation.z + ONE_ANGLE * 0.3) % PI2;
+    this.makeWave();
+  }
+
+  makeWave() {
+    //制造海浪
+    this.mesh.geometry.vertices.forEach((item, index) => {
+      item.x = this.wavesInfo[index].x + Math.cos(this.wavesInfo[index].angle) * this.wavesInfo[index].r;
+      item.y = this.wavesInfo[index].y + Math.sin(this.wavesInfo[index].angle) * this.wavesInfo[index].r;
+
+      this.wavesInfo[index].angle = (this.wavesInfo[index].angle + this.wavesInfo[index].speed) % PI2;
+    });
+
+    //每次渲染后会自己重置为false，需要手动置为true
+    this.mesh.geometry.verticesNeedUpdate = true;
+  }
+}
+
+//物体类-单个云
+class CloudObj {
+  constructor(father) {
+    this.father = father;
+
+    var geometry = new THREE.BoxGeometry(20,20,20);
+    var material = new THREE.MeshPhongMaterial({
+      color: COLORS.GRAY_D8
+    });
+
+    this.mesh = new THREE.Object3D();
+
+    var cloudNum = 3 + Math.floor(Math.random() * 3);
+    for(var i = 0;i < cloudNum;i++) {
+      //随机3~5个方块组成云
+      var mesh = new THREE.Mesh(geometry, material);
+      mesh.position.x = i * 15;
+      mesh.position.y = Math.random() * 10;
+      mesh.position.z = Math.random() * 10;
+      mesh.rotation.z = Math.random() * PI2;
+      mesh.rotation.y = Math.random() * PI2;
+
+      var scale = 0.1 + Math.random() * 0.9;
+      mesh.scale.set(scale, scale, scale);
+
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      this.mesh.add(mesh);
+    }
+  }
+}
+
+//物体类-云集合
+class CloudsObj {
+  constructor(father) {
+    this.father = father;
+
+    this.mesh = new THREE.Object3D();
+    var cloudsNum = 20;
+    var stepAngle = PI2 / cloudsNum;
+    for(var i = 0;i < cloudsNum;i++) {
+      var cloudsChild = new CloudObj(this);
+
+      var angle = stepAngle * i;
+      var h = 750 + Math.random() * 200;
+
+      cloudsChild.mesh.position.x = Math.cos(angle) * h;
+      cloudsChild.mesh.position.y = Math.sin(angle) * h;
+      cloudsChild.mesh.position.z = - 400 - Math.random() * 400;
+
+      cloudsChild.mesh.rotation.z = angle + PI / 2;
+
+      var scale = 1 + Math.random() * 2;
+      cloudsChild.mesh.scale.set(scale, scale, scale);
+
+      this.mesh.add(cloudsChild.mesh);
+    }
+  }
+
+  update() {
+    //云集合物体更新
+    this.mesh.rotation.z = (this.mesh.rotation.z + ONE_ANGLE * 0.6) % PI2;
+  }
+}
+
+//物体类-飞机
+class AirPlaneObj {
+  constructor(father) {
+    this.father = father;
+
+    this.mesh = new THREE.Object3D();
+
+    //座舱
+    var cockpitGeometry = new THREE.BoxGeometry(150,50,50,2,1,1);
+
+    //修改座舱形状，几何体顶点顺序参考three源码
+    //x轴位置修改
+    cockpitGeometry.vertices[8].x += 25;
+    cockpitGeometry.vertices[9].x += 25;
+    cockpitGeometry.vertices[10].x += 25;
+    cockpitGeometry.vertices[11].x += 25;
+    //y轴变扁
+    cockpitGeometry.vertices[8].y -= 0;
+    cockpitGeometry.vertices[9].y -= 0;
+    cockpitGeometry.vertices[10].y += 3;
+    cockpitGeometry.vertices[11].y += 3;
+
+    cockpitGeometry.vertices[4].y -= 10;
+    cockpitGeometry.vertices[5].y -= 10;
+    cockpitGeometry.vertices[6].y += 30;
+    cockpitGeometry.vertices[7].y += 30;
+    //z轴变扁
+    cockpitGeometry.vertices[8].z += 0;
+    cockpitGeometry.vertices[9].z += 0;
+    cockpitGeometry.vertices[10].z -= 0;
+    cockpitGeometry.vertices[11].z -= 0;
+
+    cockpitGeometry.vertices[4].z += 20;
+    cockpitGeometry.vertices[6].z += 20;
+    cockpitGeometry.vertices[5].z -= 20;
+    cockpitGeometry.vertices[7].z -= 20;
+
+    var cockpitMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.RED,
+      flatShading: true
+    });
+
+    this.cockpitMesh = new THREE.Mesh(cockpitGeometry, cockpitMaterial);
+    this.cockpitMesh.castShadow = true;
+    this.cockpitMesh.receiveShadow = true;
+    this.mesh.add(this.cockpitMesh);
+
+    //玻璃罩
+    var glassGeometry = new THREE.SphereGeometry(25, 32, 32);
+    //为了裁剪，这里使用材质数组
+    var glassMaterial = [];
+    glassMaterial.push(new THREE.MeshPhongMaterial({
+      color: COLORS.BLUE,
+      transparent: true,
+      opacity: 0.4,
+      side: THREE.DoubleSide,
+      flatShading: true
+    }));
+
+    this.glassMesh = new THREE.Mesh(glassGeometry, glassMaterial);
+
+    //裁剪一半玻璃罩（实际上不是裁剪，是隐藏）
+    //压入一个不显示的材质
+    this.glassMesh.material.push(new THREE.MeshBasicMaterial({visible: false}));
+    var matIndex = this.glassMesh.material.length - 1; 
+
+    var cutBox = {
+      x1: -50, x2: 0, y1: -25, y2: 25, z1: -25, z2: 25
+    };
+
+    this.glassMesh.geometry.faces.forEach((item) => {
+      if(this.father.pointInsideBOX(this.glassMesh.geometry.vertices[item.a], cutBox) != true || this.father.pointInsideBOX(this.glassMesh.geometry.vertices[item.b], cutBox) != true || this.father.pointInsideBOX(this.glassMesh.geometry.vertices[item.c], cutBox) != true) {
+        //三个点不全在盒子内，则面不在盒子内
+      }
+      else {
+        //使这个面的材质为压入的不显示材质
+        item.materialIndex = matIndex;
+      }
+    });
+
+    //更新面的时候，要设置为true
+    this.glassMesh.geometry.elementsNeedUpdate = true;
+
+    this.glassMesh.position.set(60, 25, 0);
+    this.glassMesh.scale.set(0.6, 0.8, 0.8);
+    //this.glassMesh.castShadow = true;
+    //this.glassMesh.receiveShadow = true;
+    this.mesh.add(this.glassMesh);
+
+    //机头
+    var headGeometry = new THREE.BoxGeometry(20,50,50,1,1,1);
+
+    //修改机头形状
+    //y轴
+    headGeometry.vertices[0].y -= 5;
+    headGeometry.vertices[1].y -= 5;
+    headGeometry.vertices[2].y += 5;
+    headGeometry.vertices[3].y += 5;
+    //z轴
+    headGeometry.vertices[1].z += 5;
+    headGeometry.vertices[3].z += 5;
+    headGeometry.vertices[0].z -= 5;
+    headGeometry.vertices[2].z -= 5;
+
+    var headMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.GRAY_D8,
+      flatShading: true
+    });
+
+    this.headMesh = new THREE.Mesh(headGeometry, headMaterial);
+    this.headMesh.position.x = 85;
+    this.headMesh.castShadow = true;
+    this.headMesh.receiveShadow = true;
+    this.mesh.add(this.headMesh);
+
+    //机尾
+    var tailGeometry = new THREE.BoxGeometry(60,40,5,1,1,1);
+    //修改机尾形状
+    tailGeometry.vertices[0].y -= 34;
+    tailGeometry.vertices[1].y -= 34;
+    tailGeometry.vertices[4].x -= 20;
+    tailGeometry.vertices[5].x -= 20;
+    tailGeometry.vertices[4].y -= 10;
+    tailGeometry.vertices[5].y -= 10;
+
+    var tailMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.RED,
+      flatShading: true
+    });
+
+    this.tailMesh = new THREE.Mesh(tailGeometry, tailMaterial);
+    this.tailMesh.position.set(-42,35,0);
+    this.tailMesh.castShadow = true;
+    this.tailMesh.receiveShadow = true;
+    this.mesh.add(this.tailMesh);
+
+    //尾翼
+    var tailWingGeometry = new THREE.BoxGeometry(30,6,60,1,1,2);
+    //修改尾翼形状
+    tailWingGeometry.vertices[1].x -= 20;
+
+    tailWingGeometry.vertices[0].x -= 40;
+    tailWingGeometry.vertices[2].x -= 40;
+    tailWingGeometry.vertices[3].x -= 40;
+    tailWingGeometry.vertices[5].x -= 40;
+    tailWingGeometry.vertices[6].x -= 10;
+    tailWingGeometry.vertices[8].x -= 10;
+    tailWingGeometry.vertices[9].x -= 10;
+    tailWingGeometry.vertices[11].x -= 10;
+
+    tailWingGeometry.vertices[0].y -= 3;
+    tailWingGeometry.vertices[2].y -= 3;
+    tailWingGeometry.vertices[3].y += 3;
+    tailWingGeometry.vertices[5].y += 3;
+    tailWingGeometry.vertices[6].y -= 3;
+    tailWingGeometry.vertices[8].y -= 3;
+    tailWingGeometry.vertices[9].y += 3;
+    tailWingGeometry.vertices[11].y += 3;
+
+    var tailWingMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.RED,
+      flatShading: true
+    });
+
+    this.tailWingMesh = new THREE.Mesh(tailWingGeometry, tailWingMaterial);
+    this.tailWingMesh.position.set(-60,25,0);
+    this.tailWingMesh.rotation.z = ONE_ANGLE * 5;
+    this.tailWingMesh.castShadow = true;
+    this.tailWingMesh.receiveShadow = true;
+    this.mesh.add(this.tailWingMesh);
+
+    //机翼
+    var wingGeometry = new THREE.BoxGeometry(60,20,250,1,1,2);
+    //修改机翼形状
+    wingGeometry.vertices[1].x -= 30;
+
+    wingGeometry.vertices[0].x -= 42;
+    wingGeometry.vertices[2].x -= 42;
+    wingGeometry.vertices[3].x -= 30;
+    wingGeometry.vertices[5].x -= 30;
+    wingGeometry.vertices[6].x -= 15;
+    wingGeometry.vertices[8].x -= 15;
+    wingGeometry.vertices[9].x -= 15;
+    wingGeometry.vertices[11].x -= 15;
+
+    wingGeometry.vertices[0].y -= 6;
+    wingGeometry.vertices[2].y -= 6;
+    wingGeometry.vertices[3].y += 6;
+    wingGeometry.vertices[5].y += 6;
+    wingGeometry.vertices[6].y -= 6;
+    wingGeometry.vertices[8].y -= 6;
+    wingGeometry.vertices[9].y += 6;
+    wingGeometry.vertices[11].y += 6;
+
+    var wingMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.RED,
+      flatShading: true
+    });
+
+    this.wingMesh = new THREE.Mesh(wingGeometry, wingMaterial);
+    this.wingMesh.position.set(40, 5, 0);
+    this.wingMesh.rotation.z = ONE_ANGLE * 5;
+    this.wingMesh.castShadow = true;
+    this.wingMesh.receiveShadow = true;
+    this.mesh.add(this.wingMesh);
+
+    //螺旋桨
+    var propellerGeometry = new THREE.BoxGeometry(10,10,10,1,1,1);
+    var propellerMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.BROWN,
+      flatShading: true
+    });
+
+    this.propellerMesh = new THREE.Mesh(propellerGeometry, propellerMaterial);
+    this.propellerMesh.castShadow = true;
+    this.propellerMesh.receiveShadow = true;
+
+    //叶片
+    var bladeGeometry = new THREE.BoxGeometry(2,100,20,1,2,1);
+    //修改叶片形状
+    bladeGeometry.vertices[0].z -= 5;
+    bladeGeometry.vertices[4].z -= 5;
+    bladeGeometry.vertices[7].z -= 5;
+    bladeGeometry.vertices[11].z -= 5;
+    bladeGeometry.vertices[1].z += 5;
+    bladeGeometry.vertices[5].z += 5;
+    bladeGeometry.vertices[6].z += 5;
+    bladeGeometry.vertices[10].z += 5;
+
+    bladeGeometry.vertices[0].x -= 0.5;
+    bladeGeometry.vertices[1].x -= 0.5;
+    bladeGeometry.vertices[4].x -= 0.5;
+    bladeGeometry.vertices[5].x -= 0.5;
+    bladeGeometry.vertices[6].x += 0.5;
+    bladeGeometry.vertices[7].x += 0.5;
+    bladeGeometry.vertices[10].x += 0.5;
+    bladeGeometry.vertices[11].x += 0.5;
+
+    var bladeMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.BROWN_DARK,
+      flatShading: true
+    });
+
+    //叶片加入到螺旋桨头中
+    this.bladeMesh = new THREE.Mesh(bladeGeometry, bladeMaterial);
+    this.bladeMesh.position.set(3,0,0);
+    this.bladeMesh.castShadow = true;
+    this.bladeMesh.receiveShadow = true;
+
+    this.propellerMesh.add(this.bladeMesh);
+    this.propellerMesh.position.set(95, 0, 0);
+    this.mesh.add(this.propellerMesh);
+
+    //机枪
+    this.gunRotateAngle = 0;
+    this.gunRMesh = new THREE.Object3D();
+    this.gunLMesh = new THREE.Object3D();
+
+    var gunBodyGeometry = new THREE.BoxGeometry(40,10,10,1,1,1);
+    var gunBodyMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.RED,
+      flatShading: true
+    });
+
+    this.gunBodyRMesh = new THREE.Mesh(gunBodyGeometry, gunBodyMaterial);
+    this.gunBodyRMesh.castShadow = true;
+    this.gunBodyRMesh.receiveShadow = true;
+
+    var gunTubeGeometry = new THREE.CylinderGeometry(1,1,1,30,1);
+    gunTubeGeometry.rotateZ(PI / 2);
+    var gunTubeMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.BROWN_DARK,
+      flatShading: true
+    });
+
+    this.gunTubeBigRMesh = new THREE.Mesh(gunTubeGeometry, gunTubeMaterial);
+    this.gunTubeBigRMesh.castShadow = true;
+    this.gunTubeBigRMesh.receiveShadow = true;
+    this.gunTubeBigRMesh.scale.set(8, 4, 4);
+    this.gunTubeBigRMesh.position.set(24, 0, 0);
+
+    this.gunTubesSmallRMesh = new THREE.Object3D();
+    for(var i = 0;i < 6;i++) {
+      var tempAngle = this.gunRotateAngle + i * (PI2 / 6);
+      var gunTubeSmallRMesh = new THREE.Mesh(gunTubeGeometry, gunTubeMaterial);
+      gunTubeSmallRMesh.castShadow = true;
+      gunTubeSmallRMesh.receiveShadow = true;
+      gunTubeSmallRMesh.scale.set(16, 0.5, 0.5);
+      gunTubeSmallRMesh.position.set(36, Math.cos(tempAngle) * 2.5, Math.sin(tempAngle) * 2.5);
+      this.gunTubesSmallRMesh.add(gunTubeSmallRMesh);
+    }
+    this.gunRotateAngle = (this.gunRotateAngle + ONE_ANGLE * 10) % PI2;
+
+    this.gunBodyLMesh = this.gunBodyRMesh.clone();
+    this.gunTubeBigLMesh = this.gunTubeBigRMesh.clone();
+    this.gunTubesSmallLMesh = this.gunTubesSmallRMesh.clone();
+
+    this.gunRMesh.add(this.gunBodyRMesh, this.gunTubeBigRMesh, this.gunTubesSmallRMesh);
+    this.gunLMesh.add(this.gunBodyLMesh, this.gunTubeBigLMesh, this.gunTubesSmallLMesh);
+
+    this.gunRMesh.position.set(40, -7, 60);
+    this.gunLMesh.position.set(40, -7, -60);
+    this.gunRMesh.rotation.z = ONE_ANGLE * 5;
+    this.gunLMesh.rotation.z = ONE_ANGLE * 5;
+
+    this.mesh.add(this.gunRMesh, this.gunLMesh);
+
+    //调整mesh初始位置
+    this.mesh.position.x = -100;
+  }
+
+  update() {
+    //飞机物体更新
+    this.propellerRotate();
+    this.gunRotate();
+    this.mouseFollow();
+  }
+
+  propellerRotate() {
+    //螺旋桨旋转
+    this.propellerMesh.rotation.x = (this.propellerMesh.rotation.x + ONE_ANGLE * 20) % PI2;
+  }
+
+  gunRotate() {
+    //枪管旋转
+    this.gunTubesSmallRMesh.children.forEach((item, index) => {
+      var tempAngle = this.gunRotateAngle + index * (PI2 / 6);
+      item.position.set(36, Math.cos(tempAngle) * 2.5, Math.sin(tempAngle) * 2.5);
+    });
+    this.gunTubesSmallLMesh.children.forEach((item, index) => {
+      var tempAngle = this.gunRotateAngle + index * (PI2 / 6);
+      item.position.set(36, Math.cos(tempAngle) * 2.5, Math.sin(tempAngle) * 2.5);
+    });
+
+    this.gunRotateAngle = (this.gunRotateAngle + ONE_ANGLE * 10) % PI2;
+  }
+
+  mouseFollow() {
+    //鼠标跟随
+    var targetX = this.posTransform(this.father.mousePos.x, -1, 1, -100, 100);
+    var targetY = this.posTransform(this.father.mousePos.y, -1, 1, 25, 175);
+    var targetZ = this.posTransform(this.father.mousePos.x, -1, 1, 300, 100);
+
+    //平滑的移动
+    //this.mesh.position.x += (targetX - this.mesh.position.x) * 0.1;
+    this.mesh.position.y += (targetY - this.mesh.position.y) * 0.1;
+
+    //镜头根据x值平移
+    this.father.camera.position.z += (targetZ - this.father.camera.position.z) * 0.1;
+
+    //移动时添加旋转的效果，上升时，z正向旋转，x逆向旋转（右手坐标系）
+    this.mesh.rotation.z = (targetY - this.mesh.position.y) * ONE_ANGLE * 0.7;
+    this.mesh.rotation.x = -(targetY - this.mesh.position.y) * ONE_ANGLE * 0.35;
+  }
+
+  posTransform(v,vmin,vmax,tmin,tmax) {
+    //鼠标标准化坐标转换为three坐标系坐标
+    //单坐标转换，v为鼠标标准坐标分量，vmin、vmax为标准坐标范围，tmin、tmax为three坐标系中允许的范围
+    var nv = Math.max(Math.min(v, vmax), vmin);
+    var dv = vmax - vmin;
+    var pc = (nv - vmin) / dv;
+    var dt = tmax - tmin;
+    var tv = tmin + (pc * dt);
+    return tv;
+  }
+}
+
+//物体类-飞行员
+class AviatorObj {
+  constructor(father) {
+    this.father = father;
+
+    this.mesh = new THREE.Object3D();
+
+    //身体
+    var bodyGeometry = new THREE.BoxGeometry(15, 15, 15);
+    var bodyMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.BROWN,
+      flatShading: true
+    });
+
+    this.bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    this.bodyMesh.position.set(2, -12, 0);
+    this.bodyMesh.castShadow = true;
+    this.bodyMesh.receiveShadow = true;
+    this.mesh.add(this.bodyMesh);
+
+    //脸
+    var faceGeometry = new THREE.BoxGeometry(10, 10, 10);
+    var faceMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.PINK,
+      flatShading: true
+    });
+
+    this.faceMesh = new THREE.Mesh(faceGeometry, faceMaterial);
+    this.mesh.add(this.faceMesh);
+
+    //头发
+    //头顶头发波浪运动的角度
+    this.hairsTopWaveAngle = 0;
+    this.hairsMesh = new THREE.Object3D();
+
+    var hairTopGeometry = new THREE.BoxGeometry(4, 4, 4);
+    //这里移动几何体，而不是网格物体
+    hairTopGeometry.translate(0, 2, 0);
+    var hairTopMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.BROWN,
+      flatShading: true
+    });
+
+    //头顶
+    var hairTopMesh = new THREE.Mesh(hairTopGeometry, hairTopMaterial);
+    this.hairsTopMesh = new THREE.Object3D();
+
+    for(var i = 0;i < 12;i++) {
+      var h = hairTopMesh.clone();
+      var col = i % 3;//垂直z轴方向的列数
+      var row = Math.floor(i / 3);//垂直x轴方向的列数
+      var startPosZ = -4;
+      var startPosX = -4;
+      h.position.set(startPosX + row * 4, 0, startPosZ + col * 4);
+      this.hairsTopMesh.add(h);
+    }
+
+    this.hairsMesh.add(this.hairsTopMesh);
+
+    //侧边
+    var hairSideGeometry = new THREE.BoxGeometry(12, 4, 2);
+    hairSideGeometry.translate(-6, 0, 0);
+    var hairSideMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.BROWN,
+      flatShading: true
+    });
+
+    this.hairSideRMesh = new THREE.Mesh(hairSideGeometry, hairSideMaterial);
+    this.hairSideLMesh = this.hairSideRMesh.clone();
+    this.hairSideRMesh.position.set(8, -2, 6);
+    this.hairSideLMesh.position.set(8, -2, -6);
+
+    this.hairsMesh.add(this.hairSideRMesh, this.hairSideLMesh);
+
+    //后边
+    var hairBackGeometry = new THREE.BoxGeometry(2, 8, 10);
+    var hairBackMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.BROWN,
+      flatShading: true
+    });
+
+    this.hairBackMesh = new THREE.Mesh(hairBackGeometry, hairBackMaterial);
+    this.hairBackMesh.position.set(-1, -4, 0);
+
+    this.hairsMesh.add(this.hairBackMesh);
+
+    this.hairsMesh.position.set(-5, 5, 0);
+
+    this.mesh.add(this.hairsMesh);
+
+    //护目镜
+    this.glassMesh = new THREE.Object3D();
+
+    //左右镜框
+    var glassFrontGeometry = new THREE.BoxGeometry(3,5,5);
+    var glassFrontMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.DEEP_BLUE,
+      flatShading: true
+    });
+
+    this.glassRMesh = new THREE.Mesh(glassFrontGeometry, glassFrontMaterial);
+    this.glassLMesh = this.glassRMesh.clone();
+    this.glassRMesh.position.set(6, 0, 3);
+    this.glassLMesh.position.set(6, 0, -3);
+
+    this.glassMesh.add(this.glassRMesh, this.glassLMesh);
+
+    //眼镜带
+    var glassSideGeometry = new THREE.BoxGeometry(11,1,11);
+    var glassSideMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.DEEP_BLUE,
+      flatShading: true
+    });
+
+    this.glassSideMesh = new THREE.Mesh(glassSideGeometry, glassSideMaterial);
+    this.glassMesh.add(this.glassSideMesh);
+
+    this.mesh.add(this.glassMesh);
+
+    //耳朵
+    this.earsMesh = new THREE.Object3D();
+
+    var earGeometry = new THREE.BoxGeometry(2,3,2);
+    var earMaterial = new THREE.MeshPhongMaterial({
+      color: COLORS.PINK,
+      flatShading: true
+    });
+
+    this.earRMesh = new THREE.Mesh(earGeometry, earMaterial);
+    this.earLMesh = this.earRMesh.clone();
+    this.earRMesh.position.set(0, -1, 6);
+    this.earLMesh.position.set(0, -1, -6);
+
+    this.earsMesh.add(this.earRMesh, this.earLMesh);
+
+    this.mesh.add(this.earsMesh);
+
+    //调整人物在飞机坐标系的位置
+    this.mesh.position.x = 45;
+    this.mesh.position.y = 35;
+  }
+
+  update() {
+    this.hairsTopWave();
+  }
+
+  hairsTopWave() {
+    this.hairsTopMesh.children.forEach((item, index) => {
+      item.scale.y = 0.75 + Math.cos(this.hairsTopWaveAngle + index / 3) * 0.25;
+    });
+
+    this.hairsTopWaveAngle = (this.hairsTopWaveAngle + ONE_ANGLE * 10) % PI2;
+  }
+}
+
+//动画类
+class Animate {
+  constructor() {
+    this.init();
+    this.start();
+  }
+
+  init() {
+    //窗口尺寸
+    this.width = window.innerWidth;
+    this.height = window.innerHeight;
+
+    //添加事件监控
+    document.addEventListener('mousedown', this.handleMouseDown.bind(this), false);
+    document.addEventListener('mousemove', this.handleMouseMove.bind(this), false);
+    document.addEventListener('mouseup', this.handleMouseUp.bind(this), false);
+    /*window.onmousedown = this.handleMouseDown;
+    window.onmouseup = this.handleMouseMove;
+    window.onmousemove = this.handleMouseUp;*/
+
+    //鼠标标准化位置（-1到1，0为中心）
+    this.mousePos = {
+      x: 0,
+      y: 0
+    };
+
+    //canvas
+    this.canvas = document.getElementById('animate-canvas');
+
+    //添加FPS监控
+    this.createStats();
+
+    //当前请求动画帧Id
+    this.animationFrameId = 0;
+
+    //全局计时器
+    this.globalTimer = 0;
+
+    //添加场景
+    this.scene = new THREE.Scene();
+    this.scene.fog = new THREE.Fog(COLORS.LIGHT_YELLOW, 100, 950);
+
+    //添加摄像机，第一个参数是视角域角度
+    this.camera = new THREE.PerspectiveCamera(60, this.width / this.height, 0.01, 10000);
+    this.camera.position.set(0, 100, 200);
+    //this.camera.lookAt(new THREE.Vector3(0, 100, 0));
+
+    //添加渲染器
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: this.canvas,
+      //抗锯齿
+      antialias: true,
+      alpha: true
+    });
+    this.renderer.setSize(this.width, this.height);
+    //渲染阴影
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
+    this.renderer.setClearColor(COLORS.BLACK, 0);
+    this.renderer.autoClear = false;
+    //由于指定了canvas，这里不需要将渲染器的dom加入容器中。
+    //document.body.appendChild(this.renderer.domElement);
+
+    //添加鼠标控制器
+    //this.createControls();
+
+    //添加光源
+    this.createLights();
+
+    //添加音频
+    this.createAudio();
+
+    //添加动画内物体对象
+    this.createSeaObj();
+    this.createCloudsObj();
+    this.createAirPlaneObj();
+    this.createAviatorObj();
+  }
+
+  start() {
+    this.animationFrameId = requestAnimationFrame(this.loop.bind(this));
+  }
+
+  update() {
+    //更新
+    this.seaObj.update();
+    this.cloudsObj.update();
+    this.airPlaneObj.update();
+    this.aviatorObj.update();
+
+    this.updateAudioData();
+  }
+
+  loop() {
+    this.animationFrameId = requestAnimationFrame(this.loop.bind(this));
+    this.stats.update();
+    TWEEN.update();
+
+    this.update();
+    this.renderer.clear();
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  createLights() {
+    //半球光（天空颜色，地面颜色，强度）
+    this.hemisphereLight = new THREE.HemisphereLight(COLORS.GRAY_AA,COLORS.BLACK, 0.9);
+
+    //方向光（颜色，强度）
+    this.directionalLight = new THREE.DirectionalLight(COLORS.WHITE, 0.9);
+    this.directionalLight.position.set(150, 350, 350);
+    //制造阴影
+    this.directionalLight.castShadow = true;
+    //阴影范围
+    this.directionalLight.shadow.camera.left = -400;
+    this.directionalLight.shadow.camera.right = 400;
+    this.directionalLight.shadow.camera.top = 400;
+    this.directionalLight.shadow.camera.bottom = -400;
+    this.directionalLight.shadow.camera.near = 1;
+    this.directionalLight.shadow.camera.far = 1000;
+    //阴影解析度，2的幂次方，越高越好，默认1024，最高4096
+    this.directionalLight.shadow.mapSize.width = 2048;
+    this.directionalLight.shadow.mapSize.height = 2048;
+    //方向光目标
+    //this.directionalLight.target = new THREE.Object3D({positon: new THREE.Vector3(0, 0, 0)});
+
+    //环境光（颜色，强度）
+    this.ambientLight = new THREE.AmbientLight(COLORS.DARK_ORANGE, 0.1);
+
+    //点光（颜色，强度，衰减，0为不衰减）
+    //this.pointLight = new THREE.PointLight(COLORS.WHITE, 0.5, 0);
+
+    this.scene.add(this.hemisphereLight, this.directionalLight, this.ambientLight);
+  }
+
+  createAudio() {
+    //音频监听器
+    this.listener = new THREE.AudioListener();
+    //添加监听器到摄像机
+    this.camera.add(this.listener);
+    //创建音频，绑定监听器
+    this.sound = new THREE.Audio(this.listener);
+    //音频加载器
+    var audioSrc = "audios/Arcane Refuge.mp3";
+    var audioLoader = new THREE.AudioLoader();
+    audioLoader.load(audioSrc, (buffer) => {
+      //箭头函数能绑定this，大量使用this的时候尽量不要再用function+bind了，麻烦
+      this.sound.setBuffer(buffer);
+      this.sound.setLoop(true);
+      this.sound.setVolume(0.5);
+      this.sound.play();
+    });
+    //音频分析器（音频，快速傅里叶变换尺寸，返回的数组是这个值的一半）
+    this.analyser = new THREE.AudioAnalyser(this.sound, 256);
+    //得到平均值或数组数据。
+    this.dataAvg = this.analyser.getAverageFrequency();
+    this.datas = this.analyser.getFrequencyData();
+  }
+
+  updateAudioData() {
+    this.dataAvg = this.analyser.getAverageFrequency();
+    this.datas = this.analyser.getFrequencyData();
+  }
+
+  createStats() {
+    //FPS监控
+    this.stats = new Stats();
+    this.stats.setMode(0);
+    this.stats.domElement.style.position = 'absolute';
+    this.stats.domElement.style.left = '0';
+    this.stats.domElement.style.top = '0';
+    document.body.appendChild(this.stats.domElement);
+  }
+
+  createControls() {
+    //鼠标控制器，使用此控制器，自设的相机位置和聚焦点将不起作用。
+    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.target = new THREE.Vector3(0,0,0);
+    this.controls.maxPolarAngle = Math.PI / 1;
+    this.controls.addEventListener('change', () => {
+      this.renderer.render(this.scene, this.camera);
+    });
+  }
+
+  createSeaObj() {
+    //海洋对象
+    this.seaObj = new SeaObj(this);
+    this.seaObj.mesh.position.y = -600;
+    this.scene.add(this.seaObj.mesh);
+  }
+
+  createCloudsObj() {
+    //云对象集合
+    this.cloudsObj = new CloudsObj(this);
+    this.cloudsObj.mesh.position.y = -600;
+    this.scene.add(this.cloudsObj.mesh);
+  }
+
+  createAirPlaneObj() {
+    //飞机对象
+    this.airPlaneObj = new AirPlaneObj(this);
+    this.airPlaneObj.mesh.scale.set(0.25, 0.25, 0.25);
+    this.airPlaneObj.mesh.position.y = 100;
+    this.scene.add(this.airPlaneObj.mesh);
+  }
+
+  createAviatorObj() {
+    //飞行员对象
+    this.aviatorObj = new AviatorObj(this);
+    this.airPlaneObj.mesh.add(this.aviatorObj.mesh);
+  }
+
+  pointInsideBOX(point,box) {
+    //判断点是否在盒子内，在盒子的面上认定为在盒子内。
+    if(point.x >= box.x1 && point.x <= box.x2 && point.y >= box.y1 && point.y <= box.y2 && point.z >= box.z1 && point.z <= box.z2) {
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+
+  handleMouseDown(event) {
+    //处理鼠标按下事件
+  }
+
+  handleMouseMove(event) {
+    //处理鼠标移动事件
+    var tempX = (event.clientX / this.width) * 2 - 1;
+    //鼠标坐标系原点在左上角，y轴记得转换
+    var tempY = 1 - (event.clientY / this.height) * 2;
+
+    this.mousePos = {
+      x: tempX,
+      y: tempY
+    };
+  }
+
+  handleMouseUp(event) {
+    //处理鼠标松开事件
+  }
+}
+
+//创建实例对象
+animate = new Animate();
+
+</script>

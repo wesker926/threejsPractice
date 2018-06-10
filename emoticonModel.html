@@ -1,0 +1,323 @@
+﻿<!doctype html>
+<!-- saved from url=(0016)http://localhost -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="author" content="wesker(http://www.wesker926.com/)">
+    <title>emoticonModel</title>
+
+    <style>
+        body {
+            background: #000;
+            overflow: hidden;
+        }
+        canvas { 
+            width: 100%; 
+            height: 100%;
+            left: 0;
+            top: 0;
+            position: absolute;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+</body>
+</html>
+
+<script type="text/javascript" src="js/three.js"></script>
+<script type="text/javascript" src="js/OrbitControls.js"></script>
+<script type="text/javascript" src="js/stats.min.js"></script>
+<script type="text/javascript" src="js/Tween.js"></script>
+<script type="text/javascript">
+"use strict";
+var width = window.innerWidth;
+var height = window.innerHeight;
+var canvas = document.getElementById('canvas');
+
+//常量
+const PI = Math.PI;
+const PI2 = Math.PI * 2;
+const ONE_ANGLE = PI / 180;
+
+//监控
+var stats = new Stats();
+stats.setMode(0);
+stats.domElement.style.position = 'absolute';
+stats.domElement.style.left = '0';
+stats.domElement.style.top = '0';
+document.body.appendChild( stats.domElement );
+
+var animate;
+
+class Animate {
+  constructor() {
+    this.animationFrameId = 0;
+    this.init();
+    this.start();
+  }
+
+  init() {
+    this.globalTimer = 0;
+
+    this.scene = new THREE.Scene();
+
+    this.camera = new THREE.PerspectiveCamera(75, width / height, 0.01, 10000);
+    this.camera.position.set(100, 50, 50);
+    this.camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: canvas,
+      antialias: true,
+      alpha: true
+    });
+    this.renderer.setSize(width, height);
+    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
+    this.renderer.setClearColor(0xaaaaaa, 1);
+    this.renderer.autoClear = false;
+
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    this.scene.add(this.ambientLight);
+
+    this.pointLight1 = new THREE.PointLight(0xffffff, 0.3, 0);
+    this.pointLight1.position.set(0, 50, 0);
+    this.scene.add(this.pointLight1);
+    /*this.pointLight2 = new THREE.PointLight(0xffffff, 1, 0);
+    this.pointLight2.position.set(0, 0, -11);
+    this.scene.add(this.pointLight2);*/
+
+    this.directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.6);
+    this.directionalLight1.position.set(11, 0, 0);
+    this.directionalLight1.target = new THREE.Object3D({positon: new THREE.Vector3(0, 0, 0)});
+    this.scene.add(this.directionalLight1);
+    /*this.directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
+    this.directionalLight2.position.set(-11, 0, 0);
+    this.directionalLight2.target = this.directionalLight1.target;
+    this.scene.add(this.directionalLight2);*/
+    /*this.directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.2);
+    this.directionalLight3.position.set(101, 0, 0);
+    this.directionalLight3.target = this.directionalLight1.target;
+    this.scene.add(this.directionalLight3);*/
+
+    /*this.listener = new THREE.AudioListener();
+    this.camera.add(this.listener);
+    this.sound = new THREE.Audio(this.listener);
+    var audioLoader = new THREE.AudioLoader();
+    audioLoader.load( 'audios/Aimer - 星屑ビーナス.mp3', (buffer) => {
+      //箭头函数能绑定this，大量使用this的时候尽量不要再用function+bind了，麻烦
+      this.sound.setBuffer( buffer );
+      this.sound.setLoop(true);
+      this.sound.setVolume(0.5);
+      this.sound.play();
+    });*/
+    //this.analyser = new THREE.AudioAnalyser(this.sound, 256);
+    //this.data = this.analyser.getFrequencyData();
+
+    this.huajiTexture = new THREE.TextureLoader().load("images/emoticonModelTextures_huaji.png");
+    this.yinxianTexture = new THREE.TextureLoader().load("images/emoticonModelTextures_yinxian.png");
+    this.portalBlueTexture = new THREE.TextureLoader().load("images/emoticonModelTextures_portal_blue.png");
+    this.portalOrangeTexture = new THREE.TextureLoader().load("images/emoticonModelTextures_portal_orange.png");
+
+    this.commonGeometry = new THREE.SphereGeometry(10, 32, 32);
+
+    this.commonBoxeometry = new THREE.BoxGeometry(50, 50, 2);
+
+    this.commonBoxMaterial1 = [];
+    this.commonBoxMaterial2 = [];
+
+    for(var i = 0;i < 6;i++) {
+      this.commonBoxMaterial1.push(new THREE.MeshPhongMaterial({
+        color: 0xaaaaaa,
+        side: THREE.DoubleSide,
+        //transparent: true,
+        //opacity: 1
+      }));
+      this.commonBoxMaterial2.push(new THREE.MeshPhongMaterial({
+        color: 0xaaaaaa,
+        side: THREE.DoubleSide,
+        //transparent: true,
+        //opacity: 1
+      }));
+    }
+
+    this.commonBoxMaterial1[5] = new THREE.MeshPhongMaterial({
+      map: this.portalBlueTexture,
+      side: THREE.DoubleSide,
+      //transparent: true,
+      //opacity: 1
+    });
+
+    this.commonBoxMaterial2[4] = new THREE.MeshPhongMaterial({
+      map: this.portalOrangeTexture,
+      side: THREE.DoubleSide,
+      //transparent: true,
+      //opacity: 1
+    });
+
+    this.commonMaterial1 = [];
+    this.commonMaterial1.push(new THREE.MeshPhongMaterial({
+      map: this.huajiTexture,
+      //color: 0x444444,
+      transparent: true
+    }));
+    this.commonMaterial1.push(new THREE.MeshBasicMaterial({visible: false}));
+
+    this.commonMaterial2 = new THREE.MeshPhongMaterial({
+      map: this.yinxianTexture,
+      //color: 0x444444,
+      side: THREE.DoubleSide,
+      transparent: true
+    });
+
+    this.planeMesh = new THREE.Mesh(new THREE.PlaneGeometry(200, 200, 20, 20), new THREE.MeshPhongMaterial({
+      color: 0x222222,
+      transparent: true,
+      side: THREE.DoubleSide,
+      wireframe: true
+    }));
+    this.planeMesh.rotation.x = PI / 2;
+    this.planeMesh.position.y = -10;
+    //console.log(this.planeMesh);
+    this.scene.add(this.planeMesh);
+
+    this.boxMesh1 = new THREE.Mesh(this.commonBoxeometry, this.commonBoxMaterial1);
+    this.boxMesh2 = new THREE.Mesh(this.commonBoxeometry, this.commonBoxMaterial2);
+    this.boxMesh1.position.set(0, 15, 51);
+    this.boxMesh2.position.set(0, 15, -51);
+    this.scene.add(this.boxMesh1, this.boxMesh2);
+
+    this.ballMesh1 = new THREE.Mesh(this.commonGeometry.clone(), this.commonMaterial1);
+    this.ballMesh1.position.x = 0;
+    this.ballMesh1.rotation.y = - PI / 2;
+    this.scene.add(this.ballMesh1);
+    this.ballMesh2 = new THREE.Mesh(this.commonGeometry.clone(), this.commonMaterial2);
+    this.ballMesh2.position.x = -30;
+    this.scene.add(this.ballMesh2);
+
+    this.ballMesh1.scale.y = 1.1;
+    this.tween1 = new TWEEN.Tween(this.ballMesh1.scale).to({y: 0.9}, 500).easing(TWEEN.Easing.Quadratic.InOut);
+    this.tween2 = new TWEEN.Tween(this.ballMesh1.scale).to({y: 1.1}, 500).easing(TWEEN.Easing.Quadratic.InOut);
+    this.tween1.chain(this.tween2);
+    this.tween2.chain(this.tween1);
+    this.tween1.start();
+
+    this.ballMesh1.position.y = 20 - 1;
+    this.tween3 = new TWEEN.Tween(this.ballMesh1.position).to({y: -2}, 500).easing(TWEEN.Easing.Quadratic.In);
+    this.tween4 = new TWEEN.Tween(this.ballMesh1.position).to({y: 20 - 1}, 500).easing(TWEEN.Easing.Quadratic.Out);
+    this.tween3.chain(this.tween4);
+    this.tween4.chain(this.tween3);
+    this.tween3.start();
+
+    this.ballMesh1.position.z = -40;
+    this.tween5 = new TWEEN.Tween(this.ballMesh1.position).to({z: 60}, 2000).easing(TWEEN.Easing.Linear.None).repeat(Infinity);
+    this.tween5.start();
+
+    this.ballMesh3 = new THREE.Mesh(this.commonGeometry.clone(), this.commonMaterial1);
+    this.ballMesh3.rotation.y = - PI / 2;
+    this.ballMesh3.scale.copy(this.ballMesh1.scale);
+    this.ballMesh3.position.copy(this.ballMesh1.position);
+    this.ballMesh3.position.z = this.ballMesh1.position.z - 100;
+    this.scene.add(this.ballMesh3);
+
+    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.target = new THREE.Vector3(0,0,0);
+    this.controls.maxPolarAngle = Math.PI / 1;
+    this.controls.addEventListener('change', () => {
+      this.renderer.render(this.scene, this.camera);
+    });
+  }
+
+  start() {
+    this.animationFrameId = requestAnimationFrame(this.loop.bind(this));
+  }
+
+  update() {
+    if(this.ballMesh1.position.z >= 60) {
+      this.ballMesh1.position.z = -40;
+      this.ballMesh1.position.y = 20 - 1;
+      this.tween1.stop();
+      this.tween1.start();
+      this.tween3.stop();
+      this.tween3.start();
+      this.tween5.stop();
+      this.tween5.start();
+    }
+
+    this.ballMesh3.scale.copy(this.ballMesh1.scale);
+    this.ballMesh3.position.copy(this.ballMesh1.position);
+    this.ballMesh3.position.z = this.ballMesh1.position.z - 100;
+
+    var cutBox1 = {
+      x1: -25, x2: 25, y1: -50, y2: 50, z1: 50, z2: 100
+    };
+
+    var cutBox2 = {
+      x1: -25, x2: 25, y1: -50, y2: 50, z1: -160, z2: -50
+    };
+
+    //console.log(this.ballMesh1.geometry);
+
+    this.ballMesh1.geometry.faces.forEach((item, index) => {
+      if(this.pointInsideBOX(this.ballMesh1.position, this.ballMesh1.geometry.vertices[item.a].clone(), cutBox1) != true || this.pointInsideBOX(this.ballMesh1.position, this.ballMesh1.geometry.vertices[item.b].clone(), cutBox1) != true || this.pointInsideBOX(this.ballMesh1.position, this.ballMesh1.geometry.vertices[item.c].clone(), cutBox1) != true) {
+        //三个点不全在盒子内，则面不在盒子内
+        item.materialIndex = 0;
+        //console.log(0);
+      }
+      else {
+        //使这个面的材质为压入的不显示材质
+        item.materialIndex = 1;
+        //console.log(1);
+      }
+    });
+
+    this.ballMesh3.geometry.faces.forEach((item, index) => {
+      if(this.pointInsideBOX(this.ballMesh3.position, this.ballMesh3.geometry.vertices[item.a].clone(), cutBox2) != true || this.pointInsideBOX(this.ballMesh3.position, this.ballMesh3.geometry.vertices[item.b].clone(), cutBox2) != true || this.pointInsideBOX(this.ballMesh3.position, this.ballMesh3.geometry.vertices[item.c].clone(), cutBox2) != true) {
+        //三个点不全在盒子内，则面不在盒子内
+        item.materialIndex = 0;
+        //console.log(0);
+      }
+      else {
+        //使这个面的材质为压入的不显示材质
+        item.materialIndex = 1;
+        //console.log(1);
+      }
+    });
+
+    this.ballMesh1.geometry.elementsNeedUpdate = true;
+    this.ballMesh3.geometry.elementsNeedUpdate = true;
+  }
+
+  loop() {
+    this.animationFrameId = requestAnimationFrame(this.loop.bind(this)); 
+    TWEEN.update();
+    stats.update();
+
+    this.update();
+    this.renderer.clear();
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  pointInsideBOX(pos,point,box) {
+    //判断点是否在盒子内，在盒子的面上认定为在盒子内。
+    point.applyMatrix4(new THREE.Matrix4().makeRotationY(-PI / 2));
+    if((pos.x + point.x) >= box.x1 && (pos.x + point.x) <= box.x2 && (pos.y + point.y) >= box.y1 && (pos.y + point.y) <= box.y2 && (pos.z + point.z) >= box.z1 && (pos.z + point.z) <= box.z2) {
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+}
+
+window.onmousedown = function (e) {
+}
+
+window.onmouseup = function (e) {
+}
+
+window.onmousemove = function (e) {
+}
+
+animate = new Animate();
+
+</script>

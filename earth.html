@@ -1,0 +1,286 @@
+﻿<!doctype html>
+<!-- saved from url=(0016)http://localhost -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="author" content="wesker(http://www.wesker926.com/)">
+    <title>earth</title>
+
+    <style>
+        body {
+            background: #000;
+            overflow: hidden;
+        }
+        canvas { 
+            width: 100%; 
+            height: 100%;
+            left: 0;
+            top: 0;
+            position: absolute;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+</body>
+</html>
+
+<script type="text/javascript" src="js/three.js"></script>
+<script type="text/javascript" src="js/OrbitControls.js"></script>
+<script type="text/javascript" src="js/stats.min.js"></script>
+<script type="text/javascript">
+"use strict";
+var width = window.innerWidth;
+var height = window.innerHeight;
+var canvas = document.getElementById('canvas');
+
+var coverCanvas = document.createElement('canvas');
+var coverCtx = coverCanvas.getContext('2d');
+var coverIndex = 0;
+var cover = new Image();
+cover.src = "images/earthTextures_cover.png";
+
+//常量
+const PI = Math.PI;
+const PI2 = Math.PI * 2;
+const ONE_ANGLE = PI / 180;
+
+//监控
+var stats = new Stats();
+stats.setMode(0);
+stats.domElement.style.position = 'absolute';
+stats.domElement.style.left = '0';
+stats.domElement.style.top = '0';
+document.body.appendChild( stats.domElement );
+
+//FPS控制
+var FPS = 60;
+var timeNow = Date.now();
+var timeThen = Date.now();
+var interval = 1000 / FPS;
+var delta = 0;
+
+//上次触摸点的记录，以及变化的量
+var lastMouseX = 0;
+var lastMouseY = 0;
+var mouseChangeX = 0;
+var mouseChangeY = 0;
+var mouseFlag = false;
+
+var cameraRotateX = 30 * ONE_ANGLE;
+var cameraRotateY = 0 * ONE_ANGLE;
+var cameraR = 1.2;
+
+var animate;
+
+class Animate {
+  constructor() {
+    this.animationFrameId = 0;
+    this.init();
+    this.start();
+  }
+
+  init() {
+    //初始化数据成员
+    //场景
+    this.scene = new THREE.Scene();
+    this.scene2 = new THREE.Scene();
+    //透视摄像机，参数分别是：可视角度、宽高比、最近可视距离，最远可视距离
+    this.camera = new THREE.PerspectiveCamera(75, width / height, 0.01, 10000);
+    this.camera.position.set(Math.cos(cameraRotateX) * Math.sin(cameraRotateY) * cameraR, Math.sin(cameraRotateX) * cameraR, Math.cos(cameraRotateX) * Math.cos(cameraRotateY) * cameraR);
+    this.camera.lookAt(new THREE.Vector3(0, 0, 0));
+    //渲染器
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: canvas,
+      //抗锯齿开启
+      antialias: true,
+      alpha: true
+    });
+    this.renderer.setSize(width, height);
+    //设置设备像素比
+    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
+    //设置清屏颜色
+    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.autoClear = false;
+    //不开启阴影
+    //环境光
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 1);
+    this.scene2.add(this.ambientLight);
+    //点光源
+    this.pointLight = new THREE.PointLight(0xffffff, 1, 0);
+    this.pointLight.position.set(0, 3, 7);
+    this.scene.add(this.pointLight);
+    //纹理
+    this.earth_no_clouds = new THREE.TextureLoader().load("images/earthTextures_earth_no_clouds.png");
+    this.earth_night = new THREE.TextureLoader().load("images/earthTextures_earth_night.png");
+    this.elev_bump = new THREE.TextureLoader().load("images/earthTextures_elev_bump.png");
+    this.water = new THREE.TextureLoader().load("images/earthTextures_water.png");
+    this.clouds = new THREE.TextureLoader().load("images/earthTextures_clouds.png");
+    //this.starfield = new THREE.TextureLoader().load("images/earthTextures_starfield.png");
+    this.cover = new THREE.Texture(coverCanvas);
+    this.cover.wrapS = THREE.RepeatWrapping;
+    this.cover.wrapT = THREE.RepeatWrapping;
+    this.cover.needsUpdate = true;
+    //几何与材质
+    this.earthGeometry = new THREE.SphereGeometry(0.5, 64, 64);
+    this.earthMaterial = new THREE.MeshPhongMaterial({
+      map: this.earth_no_clouds,
+      color: 0xffffff,
+      bumpMap: this.elev_bump,
+      bumpScale: 0.005,
+      specularMap: this.water,
+      specular: 0x111111,
+      transparent: true
+    });
+    this.earthNightGeometry = new THREE.SphereGeometry(0.5, 64, 64);
+    this.earthNightMaterial = new THREE.MeshPhongMaterial({
+      alphaMap: this.cover,
+      //map: this.cover,
+      map: this.earth_night,
+      color: 0xffffff,
+      bumpMap: this.elev_bump,
+      bumpScale: 0.005,
+      specularMap: this.water,
+      specular: 0x111111,
+      transparent: true
+    });
+    this.cloudsGeometry = new THREE.SphereGeometry(0.503, 64, 64);
+    this.cloudsMaterial = new THREE.MeshPhongMaterial({
+      map: this.clouds,
+      color: 0xffffff,
+      transparent: true
+    });
+    /*this.starfieldGeometry = new THREE.SphereGeometry(1.51, 64, 64);
+    this.starfieldMaterial = new THREE.MeshPhongMaterial({
+      map: this.starfield,
+      side: THREE.BackSide,
+      transparent: true
+    });*/
+    //obj
+    this.earthObj = new THREE.Mesh(this.earthGeometry, this.earthMaterial);
+    this.earthObj.position.set(0, 0, 0);
+    this.earthNightObj = new THREE.Mesh(this.earthNightGeometry, this.earthNightMaterial);
+    this.earthNightObj.position.set(0, 0, 0);
+    this.cloudsObj = new THREE.Mesh(this.cloudsGeometry, this.cloudsMaterial);
+    this.cloudsObj.position.set(0, 0, 0);
+    //this.starfieldObj = new THREE.Mesh(this.starfieldGeometry, this.starfieldMaterial);
+    //this.starfieldObj.position.set(0, 0, 0);
+
+    this.scene.add(this.earthObj);
+    this.scene2.add(this.earthNightObj);
+    this.scene.add(this.cloudsObj);
+    //this.scene.add(this.starfieldObj);
+  }
+
+  start() {
+    //请求循环动画帧
+    timeThen = Date.now();
+    this.animationFrameId = requestAnimationFrame(this.loop.bind(this));
+  }
+  update() {
+    //更新
+    if(mouseFlag == true) {
+      /*cameraRotateX += mouseChangeY * ONE_ANGLE * 0.1;
+      if(cameraRotateX > ONE_ANGLE * 85) {
+        cameraRotateX = ONE_ANGLE * 85;
+      }
+      else if(cameraRotateX < - ONE_ANGLE * 85) {
+        cameraRotateX = - ONE_ANGLE * 85;
+      }
+
+      cameraRotateY -= mouseChangeX * ONE_ANGLE * 0.1;
+      if(cameraRotateY >= ONE_ANGLE * 360) {
+        cameraRotateY -= ONE_ANGLE * 360;
+      }
+      else if(cameraRotateY < 0) {
+        cameraRotateY += ONE_ANGLE * 360;
+      }
+      
+      this.camera.position.set(Math.cos(cameraRotateX) * Math.sin(cameraRotateY) * cameraR, Math.sin(cameraRotateX) * cameraR, Math.cos(cameraRotateX) * Math.cos(cameraRotateY) * cameraR);
+      this.camera.lookAt(new THREE.Vector3(0, 0, 0));*/
+
+      mouseChangeX = 0;
+      mouseChangeY = 0;
+    }
+
+    this.earthObj.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), ONE_ANGLE * 0.6);
+    this.earthNightObj.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), ONE_ANGLE * 0.6);
+
+    cameraRotateY += ONE_ANGLE * 0.3;
+    if(cameraRotateY >= ONE_ANGLE * 360) {
+        cameraRotateY -= ONE_ANGLE * 360;
+      }
+      else if(cameraRotateY < 0) {
+        cameraRotateY += ONE_ANGLE * 360;
+      }
+
+    coverIndex += cover.width / 600;
+    if(coverIndex >= cover.width) {
+      coverIndex -= cover.width;
+    }
+
+    /*console.log(this.cover.offset);
+    this.cover.offset.x = coverIndex / cover.width;*/
+    //查阅文档后发现，offset不可用于alphaMap所用的纹理，我能怎么办，不会webgl我也很绝望啊，只能用笨法子了。
+
+    coverCtx.clearRect(0, 0, coverCanvas.width, coverCanvas.height);
+    coverCtx.drawImage(cover, coverIndex, 0, cover.width - coverIndex, cover.height, 0, 0, cover.width - coverIndex, cover.height);
+    coverCtx.drawImage(cover, 0, 0, coverIndex, cover.height, cover.width - coverIndex, 0, coverIndex, cover.height);
+    this.cover.needsUpdate = true;
+
+    this.cloudsObj.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), ONE_ANGLE * 0.6);
+    //this.starfieldObj.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), - ONE_ANGLE * 0.01);
+
+    this.camera.position.set(Math.cos(cameraRotateX) * Math.sin(cameraRotateY) * cameraR, Math.sin(cameraRotateX) * cameraR, Math.cos(cameraRotateX) * Math.cos(cameraRotateY) * cameraR);
+    this.camera.lookAt(new THREE.Vector3(0, 0, 0));
+  }
+  loop() {
+    //循环
+    this.animationFrameId = requestAnimationFrame(this.loop.bind(this)); 
+    stats.update();
+    
+    timeNow = Date.now();
+    delta = timeNow - timeThen;
+    //控制动画帧更新的FPS
+    if (delta >= interval) {
+      timeThen = timeNow - (delta % interval);
+      this.update();
+      this.renderer.clear();
+      this.renderer.render(this.scene, this.camera);
+      this.renderer.clearDepth();
+      this.renderer.render(this.scene2, this.camera);
+    }
+  }
+}
+
+cover.onload = function() {
+  coverCanvas.width = cover.width;
+  coverCanvas.height = cover.height;
+  coverCtx.clearRect(0, 0, coverCanvas.width, coverCanvas.height);
+  coverCtx.drawImage(cover, coverIndex, 0, cover.width - coverIndex, cover.height, 0, 0, cover.width - coverIndex, cover.height);
+  coverCtx.drawImage(cover, 0, 0, coverIndex, cover.height, cover.width - coverIndex, 0, coverIndex, cover.height);
+  animate = new Animate();
+}
+
+window.onmousedown = function (e) {
+  mouseFlag = true;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+  mouseChangeX = 0;
+  mouseChangeY = 0;
+}
+
+window.onmouseup = function (e) {
+  mouseFlag = false;
+}
+
+window.onmousemove = function (e) {
+  if(mouseFlag == true) {
+    mouseChangeX = e.clientX - lastMouseX;
+    mouseChangeY = e.clientY - lastMouseY;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  }
+}
+
+</script>
