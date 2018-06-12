@@ -1,0 +1,586 @@
+﻿<!doctype html>
+<!-- saved from url=(0016)http://localhost -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="author" content="wesker(http://www.wesker926.com/)">
+    <title>littlePony</title>
+
+    <style>
+        body {
+            background: #000000;
+            overflow: hidden;
+        }
+        #animate {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            left: 0;
+            top: 0;
+            overflow: hidden;
+            background: #000000;
+        }
+        #animate-canvas {
+            position: absolute;
+            width: 100%; 
+            height: 100%;
+            left: 0;
+            top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="animate">
+        <canvas id="animate-canvas"></canvas>
+    </div>
+</body>
+</html>
+
+<script type="text/javascript" src="js/three.js">//threejs</script>
+<script type="text/javascript" src="js/OrbitControls.js">//控制器</script>
+<script type="text/javascript" src="js/stats.min.js">//状态监控</script>
+<script type="text/javascript">
+"use strict";
+//常量
+const PI = Math.PI;
+const PI2 = Math.PI * 2;
+const PID2 = Math.PI / 2;
+const PID4 = Math.PI / 4;
+const ONE_ANGLE = PI / 180;
+const COLORS = {
+  WHITE: 0xffffff,
+  BLACK: 0x000000,
+  GRAY_AA: 0xaaaaaa,
+  RED: 0xff0000,
+  GREEN: 0x00ff00,
+  BLUE: 0x0000ff,
+  LIGHT_YELLOW: 0xf7d9aa,
+  SKYBLUE: 0x00bfff,
+  BROWN: 0xa52a2a
+}
+
+//声明动画类对象
+var animate;
+
+//物体类 - 机器台
+class Machine {
+  constructor(father) {
+    this.father = father;
+
+    this.speed = -0.1;
+
+    this.scanerCenterPos = new THREE.Vector3(0, 16, 19);
+    this.scanerPlaneLookAt = new THREE.Vector3(0, 0, 1);
+    
+    this.modulesGroup = new THREE.Group();
+
+    var geometry = new THREE.BoxGeometry(20, 1, 40);
+    var material = new THREE.MeshPhysicalMaterial({
+      //transparent: true,
+      side: THREE.FrontSide,
+      color: COLORS.WHITE
+    });
+
+    this.module1 = new THREE.Mesh(geometry, material);
+    this.module1.position.y = 0.5;
+    this.modulesGroup.add(this.module1);
+
+    geometry = new THREE.BoxGeometry(1, 1, 40);
+
+    this.module2 = new THREE.Mesh(geometry, material);
+    this.module2.position.set(-9.5, 1.5, 0);
+    this.modulesGroup.add(this.module2);
+
+    this.module3 = this.module2.clone();
+    this.module3.position.set(9.5, 1.5, 0);
+    this.modulesGroup.add(this.module3);
+
+    this.module4 = new THREE.Object3D();
+
+    geometry = new THREE.BoxGeometry(0.3, 1, 1);
+    var mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(-0.15, 0, 0);
+    this.module4.add(mesh);
+
+    geometry = new THREE.BoxGeometry(2, 2, 2);
+    mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(-1.3, 0, 0);
+    this.module4.add(mesh);
+
+    geometry = new THREE.BoxGeometry(1, 1, 1);
+    geometry.vertices[0].set(-9, 15, 0.5);
+    geometry.vertices[1].set(-9, 15, -0.5);
+    geometry.vertices[4].set(-10.526, 15, -0.5);
+    geometry.vertices[5].set(-10.526, 15, 0.5);
+    geometry.vertices[6].x -= 0.526;
+    geometry.vertices[7].x -= 0.526;
+    mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(-1.3, 1.5, 0);
+    this.module4.add(mesh);
+
+    geometry = new THREE.CylinderGeometry(1.2, 1.2, 1.5, 20);
+    geometry.rotateX(PID2);
+    mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(-11, 16.5, 0);
+    this.module4.add(mesh);
+
+    geometry = new THREE.BoxGeometry(1, 1, 1);
+    geometry.vertices[2].set(-7.7, -5, 0.5);
+    geometry.vertices[3].set(-7.7, -5, -0.5);
+    geometry.vertices[4].x += 1;
+    geometry.vertices[5].x += 1;
+    geometry.vertices[4].y += 1;
+    geometry.vertices[5].y += 1;
+    geometry.vertices[6].set(-9.34, -5, -0.5);
+    geometry.vertices[7].set(-9.34, -5, 0.5);
+    mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(-2.6, 21.5, 0);
+    this.module4.add(mesh);
+
+    var temp = this.module4.clone();
+    temp.rotation.y = PI;
+    temp.position.x = 20;
+    this.module4.add(temp);
+
+    var shape = new THREE.Shape();
+    var path = new THREE.Path();
+    shape.moveTo(15, 0);
+    path.moveTo(14, 0);
+    for(var i = 1;i <= 30;i++) {
+      var x = Math.cos(i * ONE_ANGLE * 12);
+      var y = Math.sin(i * ONE_ANGLE * 12);
+      shape.lineTo(x * 15 + 0, y * 15 + 0);
+      path.lineTo(x * 14 + 0, y * 14 + 0);
+    }
+    shape.holes.push(path);
+
+    geometry = new THREE.ExtrudeGeometry(shape, {
+      amount: 1,
+      bevelEnabled: false
+    });
+    mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(10, 15, -0.5);
+    this.module4.add(mesh);
+
+    geometry = new THREE.CircleGeometry(14, 32);
+    material = new THREE.MeshBasicMaterial({
+      transparent: true,
+      side: THREE.DoubleSide,
+      color: COLORS.RED,
+      opacity: 0.2,
+      //wireframe: true
+    });
+    mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(10, 15, 0);
+    this.module4.add(mesh);
+
+    this.module4.position.set(-10, 1, 19);
+    this.modulesGroup.add(this.module4);
+  }
+
+  update() {
+    this.module4.position.z += this.speed;
+
+    if(this.module4.position.z >= 19) {
+      this.module4.position.z = 19;
+      this.speed = -Math.abs(this.speed);
+    }
+    else if(this.module4.position.z <= -19) {
+      this.module4.position.z = -19;
+      this.speed = Math.abs(this.speed);
+    }
+
+    this.scanerCenterPos.z = this.module4.position.z;
+  }
+}
+
+//物体类 - 小马驹
+class Horse {
+  constructor(father) {
+    this.father = father;
+
+    this.modelObj = new THREE.Object3D();
+
+    this.load();
+  }
+
+  load() {
+    //加载模型文件
+    var loader = new THREE.JSONLoader();
+    loader.load(
+      'models/horse.js',
+      (geometry, material) => {
+        material = [];
+        material.push(new THREE.MeshLambertMaterial({
+          vertexColors: THREE.FaceColors,
+          morphTargets: true,
+          //wireframe: true
+        }));
+
+        material.push(new THREE.MeshLambertMaterial({
+          color: COLORS.BROWN,
+          morphTargets: true,
+          wireframe: true
+        }));
+
+        this.modelObj = new THREE.Mesh(geometry, material);
+
+        var mixer = new THREE.AnimationMixer(this.modelObj);
+        var clip = THREE.AnimationClip.CreateFromMorphTargetSequence('gallop', geometry.morphTargets, 60);
+        var action = mixer.clipAction(clip);
+
+        action.clampWhenFinished = false;
+        action.setDuration(1);
+        action.play();
+
+        this.modelObj.mixer = mixer;
+        this.modelObj.action = action;
+
+        this.modelObj.action.time = 0;
+        this.modelObj.scale.set(0.12, 0.12, 0.12);
+        this.modelObj.position.y += 4;
+        this.modelObj.position.z += 3;
+
+        //console.log(this.modelObj);
+        this.father.scene.add(this.modelObj);
+      },
+      (xhr) => {
+        //加载中
+        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+      },
+      (error) => {
+        //加载错误
+        console.log('An error happened');
+      }
+    );
+  }
+
+  update(delta) {
+    if(this.modelObj.mixer != undefined) {
+      this.modelObj.mixer.update(delta);
+      //this.modelObj.action.setEffectiveTimeScale(this.mousePos.x * 2);
+    }
+
+    if(this.modelObj.geometry != undefined) {
+      var Q = Math.floor((this.modelObj.mixer.time % 1) * 15);
+      var vms = this.modelObj.geometry.morphTargets[Q].vertices;
+      var r = this.modelObj.scale.x;
+      this.modelObj.geometry.faces.forEach((item, index) => {
+        if(this.judgePos(vms[item.a].clone(), r, this.modelObj.position.clone()) || this.judgePos(vms[item.b].clone(), r, this.modelObj.position.clone()) || this.judgePos(vms[item.c].clone(), r, this.modelObj.position.clone())) {
+          item.materialIndex = 1;
+        }
+        else {
+          item.materialIndex = 0;
+        }
+      });
+
+      this.modelObj.geometry.elementsNeedUpdate = true;
+    }
+
+    //console.log(this.modelObj.geometry);
+    //console.log(this.modelObj.mixer.time % 1);
+  }
+
+  judgePos(point, scale, pos) {
+    var temp = point.multiplyScalar(scale).add(pos).sub(this.father.machine.scanerCenterPos).normalize();
+    var temp2 = this.father.machine.scanerPlaneLookAt;
+
+    var angle = temp.angleTo(temp2);
+    if(angle <= PID2) {
+      //在平面正面
+      return true;
+    }
+    else {
+      //在平面反面
+      return false;
+    }
+  }
+}
+
+//动画类
+class Animate {
+  constructor() {
+    this.init();
+    this.start();
+  }
+
+  init() {
+    //窗口尺寸
+    this.width = window.innerWidth;
+    this.height = window.innerHeight;
+
+    //添加事件监控
+    document.addEventListener('mousedown', this.handleMouseDown.bind(this), false);
+    document.addEventListener('mousemove', this.handleMouseMove.bind(this), false);
+    document.addEventListener('mouseup', this.handleMouseUp.bind(this), false);
+    /*window.onmousedown = this.handleMouseDown;
+    window.onmouseup = this.handleMouseMove;
+    window.onmousemove = this.handleMouseUp;*/
+
+    //鼠标标准化位置（-1到1，0为中心）
+    this.mousePos = {
+      x: 0,
+      y: 0
+    };
+
+    //canvas
+    this.canvas = document.getElementById('animate-canvas');
+
+    //添加FPS监控
+    this.createStats();
+
+    //当前请求动画帧Id
+    this.animationFrameId = 0;
+
+    //全局计时器
+    this.globalTimer = new THREE.Clock(false);
+    this.deltaTime = 0;
+    this.elapsedTime = 0;
+
+    //添加场景
+    this.scene = new THREE.Scene();
+    this.scene.fog = new THREE.Fog(COLORS.BLACK, 100, 950);
+
+    ///添加摄像机，第一个参数是视角域角度
+    this.camera = new THREE.PerspectiveCamera(60, this.width / this.height, 0.01, 10000);
+    this.camera.position.set(45, 45, 45);
+    this.camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+    //添加渲染器
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: this.canvas,
+      //抗锯齿
+      antialias: true,
+      alpha: true,
+      //物理照明方式
+      physicalCorrectLights: true
+    });
+    this.renderer.setSize(this.width, this.height);
+    //渲染阴影
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
+    this.renderer.setClearColor(COLORS.BLACK, 0);
+    this.renderer.autoClear = false;
+    //由于指定了canvas，这里不需要将渲染器的dom加入容器中。
+    //document.body.appendChild(this.renderer.domElement);
+
+    //添加鼠标控制器
+    this.createControls();
+
+    //添加光源
+    this.createLights();
+
+    //添加音频
+    //this.createAudio();
+
+    //添加辅助平面和辅助坐标线
+    this.createGridHelper();
+
+    //添加动画内物体对象
+    this.createMachine();
+    this.createHorse();
+  }
+
+  start() {
+    this.globalTimer.start();
+    this.animationFrameId = requestAnimationFrame(this.loop.bind(this));
+  }
+
+  update() {
+    //更新
+    //注意，这里的时间单位都是秒
+    this.deltaTime = this.globalTimer.getDelta();
+    this.elapsedTime += this.deltaTime;
+
+    this.machine.update();
+    this.horse.update(this.deltaTime);
+  }
+
+  loop() {
+    this.animationFrameId = requestAnimationFrame(this.loop.bind(this));
+    this.stats.update();
+
+    this.update();
+    this.controls.update();
+    this.renderer.clear();
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  createLights() {
+    //半球光（天空颜色，地面颜色，强度）
+    this.hemisphereLight = new THREE.HemisphereLight(COLORS.WHITE,COLORS.BLACK, 0.8);
+    this.hemisphereLight.position.set(0, 1, 0);
+
+    //方向光（颜色，强度）
+    //this.directionalLight = new THREE.DirectionalLight(COLORS.WHITE, 1);
+    //this.directionalLight.position.set(0, 100, 0);
+    //制造阴影
+    /*this.directionalLight.castShadow = true;
+    //阴影范围
+    this.directionalLight.shadow.camera.left = -400;
+    this.directionalLight.shadow.camera.right = 400;
+    this.directionalLight.shadow.camera.top = 400;
+    this.directionalLight.shadow.camera.bottom = -400;
+    this.directionalLight.shadow.camera.near = 1;
+    this.directionalLight.shadow.camera.far = 1000;
+    //阴影解析度，2的幂次方，越高越好，默认1024，最高4096
+    this.directionalLight.shadow.mapSize.width = 2048;
+    this.directionalLight.shadow.mapSize.height = 2048;*/
+    //方向光目标
+    //this.directionalLight.target = new THREE.Object3D({positon: new THREE.Vector3(0, 0, 0)});
+
+    //环境光（颜色，强度）
+    this.ambientLight = new THREE.AmbientLight(COLORS.WHITE, 0.3);
+
+    //点光（颜色，强度，衰减，0为不衰减）
+    this.pointLight = new THREE.PointLight(COLORS.WHITE, 0.3, 1000, 2);
+    this.pointLight.position.set(100, 100, 0);
+    this.pointLight2 = new THREE.PointLight(COLORS.WHITE, 0.3, 1000, 2);
+    this.pointLight2.position.set(0, 20, 100);
+    this.pointLight3 = new THREE.PointLight(COLORS.WHITE, 0.3, 1000, 2);
+    this.pointLight3.position.set(-100, 100, 0);
+    this.pointLight4 = new THREE.PointLight(COLORS.WHITE, 0.3, 1000, 2);
+    this.pointLight4.position.set(1000, 20, -100);
+
+    this.scene.add(this.hemisphereLight, this.ambientLight, this.pointLight, this.pointLight2, this.pointLight3, this.pointLight4);
+  }
+
+  createAudio() {
+    //音频监听器
+    this.audioListener = new THREE.AudioListener();
+    //添加监听器到摄像机
+    this.camera.add(this.audioListener);
+    //创建音频，绑定监听器
+    this.sound = new THREE.Audio(this.audioListener);
+    //音频加载器
+    var audioSrc = "audios/xxx.mp3";
+    var audioLoader = new THREE.AudioLoader();
+    audioLoader.load(audioSrc, (buffer) => {
+      //箭头函数能绑定this，大量使用this的时候尽量不要再用function+bind了，麻烦
+      this.sound.setBuffer(buffer);
+      this.sound.setLoop(true);
+      this.sound.setVolume(0.5);
+      this.sound.play();
+    });
+    //快速傅里叶变换参数
+    this.fftSize = 128;
+    //音频分析器（音频，快速傅里叶变换尺寸，返回的数组是这个值的一半）
+    this.audioAnalyser = new THREE.AudioAnalyser(this.sound, this.fftSize);
+    //得到平均值或数组数据。
+    this.audioDataAvg = this.audioAnalyser.getAverageFrequency();
+    this.audioDatas = this.audioAnalyser.getFrequencyData();
+  }
+
+  updateAudioData() {
+    this.audioDataAvg = this.audioAnalyser.getAverageFrequency();
+    this.audioDatas = this.audioAnalyser.getFrequencyData();
+  }
+
+  createStats() {
+    //FPS监控
+    this.stats = new Stats();
+    this.stats.setMode(0);
+    this.stats.domElement.style.position = 'absolute';
+    this.stats.domElement.style.left = '0';
+    this.stats.domElement.style.top = '0';
+    document.body.appendChild(this.stats.domElement);
+  }
+
+  createControls() {
+    //鼠标控制器，使用此控制器，自设的相机位置和聚焦点将不起作用。
+    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.target = new THREE.Vector3(0,0,0);
+    this.controls.maxPolarAngle = PI / 1;
+    this.controls.addEventListener('change', () => {
+      this.renderer.render(this.scene, this.camera);
+    });
+  }
+
+  createGridHelper() {
+    //添加辅助平面和辅助坐标线
+    this.gridHelper = new THREE.GridHelper(100, 100, COLORS.GRAY_AA, COLORS.GRAY_AA);
+    this.scene.add(this.gridHelper);
+
+    var tempPosition = this.gridHelper.geometry.getAttribute('position').array;
+
+    tempPosition[50 * 12 + 3] = 0;
+    tempPosition[50 * 12 + 11] = 0;
+
+    //console.log(this.gridHelper);
+
+    var geometry, material;
+
+    geometry = new THREE.Geometry();
+    geometry.vertices.push(
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(50, 0, 0)
+    );
+    material = new THREE.LineBasicMaterial({
+      color: COLORS.RED
+    });
+
+    this.gridCenterLineX = new THREE.Line(geometry, material);
+    this.scene.add(this.gridCenterLineX);
+
+    geometry = new THREE.Geometry();
+    geometry.vertices.push(
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 50, 0)
+    );
+    material = new THREE.LineBasicMaterial({
+      color: COLORS.GREEN
+    });
+
+    this.gridCenterLineY = new THREE.Line(geometry, material);
+    this.scene.add(this.gridCenterLineY);
+
+    geometry = new THREE.Geometry();
+    geometry.vertices.push(
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, 50)
+    );
+    material = new THREE.LineBasicMaterial({
+      color: COLORS.BLUE
+    });
+
+    this.gridCenterLineZ = new THREE.Line(geometry, material);
+    this.scene.add(this.gridCenterLineZ);
+  }
+
+  createMachine() {
+    //添加机器台对象
+    this.machine = new Machine(this);
+    this.scene.add(this.machine.modulesGroup);
+  }
+
+  createHorse() {
+    //添加小马
+    this.horse = new Horse(this);
+    //当加载完成后加入scene
+  }
+
+  handleMouseDown(event) {
+    //处理鼠标按下事件
+  }
+
+  handleMouseMove(event) {
+    //处理鼠标移动事件
+    var tempX = (event.clientX / this.width) * 2 - 1;
+    //鼠标坐标系原点在左上角，y轴记得转换
+    var tempY = 1 - (event.clientY / this.height) * 2;
+
+    this.mousePos = {
+      x: tempX,
+      y: tempY
+    };
+  }
+
+  handleMouseUp(event) {
+    //处理鼠标松开事件
+  }
+}
+
+//创建实例对象
+animate = new Animate();
+
+</script>
